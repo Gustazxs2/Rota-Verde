@@ -1,0 +1,19 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+
+# Arquivos geográficos utilizados na importação local
+backend/*.osm
+backend/*.osm.pbf
+backend/*.pbf
+backend/*.geojson
+backend/resultado_*.json
+
+# Arquivos gerados localmente
+backend/staticfiles
+backend/db.sqlite3
