@@ -1,0 +1,6 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","id":"n11812808934","geometry":{"type":"Point","coordinates":[-48.4754611,-1.4580061]},"properties":{"highway":"crossing"}},
+{"type":"Feature","id":"n11815400945","geometry":{"type":"Point","coordinates":[-48.4772452,-1.456343]},"properties":{"crossing:signals":"yes","highway":"crossing"}},
+{"type":"Feature","id":"w1272114677","geometry":{"type":"LineString","coordinates":[[-48.4755119,-1.4580088],[-48.4754611,-1.4580061],[-48.47542,-1.4580061]]},"properties":{"highway":"crossing"}},
+{"type":"Feature","id":"w1272394643","geometry":{"type":"LineString","coordinates":[[-48.4772936,-1.4563437],[-48.4772452,-1.456343],[-48.4772057,-1.4563417]]},"properties":{"highway":"crossing"}}
+]}

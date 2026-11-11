@@ -1,0 +1,10 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-48.4728754,-1.4346755]},"properties":{"highway":"traffic_signals"}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-48.4753168,-1.4330412]},"properties":{"highway":"traffic_signals","traffic_signals":"signal","traffic_signals:direction":"forward"}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-48.4755203,-1.4329122]},"properties":{"highway":"traffic_signals","traffic_signals":"signal","traffic_signals:direction":"forward"}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-48.4754168,-1.4329852]},"properties":{"highway":"traffic_signals","traffic_signals":"signal","traffic_signals:direction":"forward"}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-48.4729149,-1.4346496]},"properties":{"highway":"crossing"}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[-48.4752588,-1.4330804]},"properties":{"highway":"crossing"}},
+{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-48.4728754,-1.4346755],[-48.4729149,-1.4346496],[-48.4736099,-1.4341939],[-48.4743461,-1.4336968],[-48.4748521,-1.4333551],[-48.4752588,-1.4330804],[-48.4753168,-1.4330412],[-48.4754168,-1.4329852],[-48.4755203,-1.4329122]]},"properties":{"bicycle":"yes","foot":"yes","highway":"tertiary","lanes":"2","maxspeed":"40","name":"Travessa Humaitá","oneway":"yes","sidewalk":"both","surface":"asphalt"}},
+{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-48.473258,-1.4335284],[-48.4736586,-1.4341482]]},"properties":{"highway":"path"}}
+]}
