@@ -3,12 +3,14 @@ import math
 import os
 import urllib.request
 import urllib.error
+import logging
 
 from django.db import connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
+logger = logging.getLogger(__name__)
 
 
 def encontrar_vertice(latitude, longitude):
@@ -423,46 +425,59 @@ class CalcularRotaView(APIView):
 
         sql_arestas = montar_sql_arestas(perfil)
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"""
-                WITH caminho AS (
-                    SELECT * FROM pgr_dijkstra(
-                        $edges$ {sql_arestas} $edges$,
-                        %s, %s, directed := true
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    WITH caminho AS (
+                        SELECT * FROM pgr_dijkstra(
+                            $edges$ {sql_arestas} $edges$,
+                            %s, %s, directed := true
+                        )
+                    ),
+                    segmentos AS (
+                        SELECT
+                            c.path_seq,
+                            c.cost,
+                            CASE
+                                WHEN c.node = v.source THEN v.geom
+                                ELSE ST_Reverse(v.geom)
+                            END AS geom
+                        FROM caminho c
+                        JOIN roteamento.rv_ways v ON v.id = c.edge
+                        WHERE c.edge <> -1
+                    ),
+                    resumo AS (
+                        SELECT
+                            ST_MakeLine(geom ORDER BY path_seq) AS geom,
+                            COUNT(*) AS quantidade_segmentos,
+                            SUM(cost) AS custo_total
+                        FROM segmentos
                     )
-                ),
-                segmentos AS (
                     SELECT
-                        c.path_seq,
-                        c.cost,
-                        CASE
-                            WHEN c.node = v.source THEN v.geom
-                            ELSE ST_Reverse(v.geom)
-                        END AS geom
-                    FROM caminho c
-                    JOIN roteamento.rv_ways v ON v.id = c.edge
-                    WHERE c.edge <> -1
-                ),
-                resumo AS (
-                    SELECT
-                        ST_MakeLine(geom ORDER BY path_seq) AS geom,
-                        COUNT(*) AS quantidade_segmentos,
-                        SUM(cost) AS custo_total
-                    FROM segmentos
+                        ST_AsGeoJSON(geom, 7),
+                        quantidade_segmentos,
+                        custo_total,
+                        ST_Length(geom::geography)
+                    FROM resumo
+                    WHERE geom IS NOT NULL;
+                    """,
+                    [origem["id"], destino["id"]]
                 )
-                SELECT
-                    ST_AsGeoJSON(geom, 7),
-                    quantidade_segmentos,
-                    custo_total,
-                    ST_Length(geom::geography)
-                FROM resumo
-                WHERE geom IS NOT NULL;
-                """,
-                [origem["id"], destino["id"]]
-            )
 
-            resultado = cursor.fetchone()
+                resultado = cursor.fetchone()
+
+        except Exception:
+            logger.exception(
+                "ERRO AO CALCULAR ROTA | Perfil: %s | Origem: %s | Destino: %s",
+                perfil,
+                origem["id"],
+                destino["id"]
+            )
+            return Response(
+                {"erro": "Erro interno ao executar o cálculo da rota."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         if resultado is None:
             return Response(
