@@ -126,10 +126,6 @@ def montar_sql_arestas(perfil):
         """
 
         permissao = """
-
-        """
-
-        sentido = """
             CASE
                 WHEN tags->'highway' = 'busway' THEN -1
 
@@ -152,6 +148,8 @@ def montar_sql_arestas(perfil):
                 ELSE custo_base
             END
         """
+
+        sentido = "COALESCE(o.tags->'oneway:bicycle', o.tags->'oneway', '')"
 
     else:  # Pedestre
         join_infraestrutura = """
