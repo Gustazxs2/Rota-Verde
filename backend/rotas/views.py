@@ -1,10 +1,14 @@
 import json
 import math
+import os
+import urllib.request
+import urllib.error
 
 from django.db import connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
 
 
 def encontrar_vertice(latitude, longitude):
@@ -485,4 +489,79 @@ class CalcularRotaView(APIView):
                 "distancia_m": round(float(resultado[3]), 2),
                 "distancia_km": round(float(resultado[3]) / 1000, 3)
             }
+        })
+
+class BuscarDestinoView(APIView):
+    def post(self, request):
+        destino = request.data.get("destino", "").strip()
+
+        if not destino:
+            return Response(
+                {"erro": "Informe um destino."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        api_key = os.environ.get("GOOGLE_PLACES_API_KEY")
+
+        if not api_key:
+            return Response(
+                {"erro": "Chave do Google Places não configurada no servidor."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        url = "https://places.googleapis.com/v1/places:searchText"
+
+        dados = {
+            "textQuery": f"{destino}, Belém, Pará, Brasil",
+            "languageCode": "pt-BR",
+            "regionCode": "BR",
+            "maxResultCount": 1
+        }
+
+        requisicao = urllib.request.Request(
+            url,
+            data=json.dumps(dados).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": (
+                    "places.displayName,"
+                    "places.formattedAddress,"
+                    "places.location"
+                )
+            },
+            method="POST"
+        )
+
+        try:
+            with urllib.request.urlopen(requisicao, timeout=15) as resposta:
+                resultado = json.loads(resposta.read().decode("utf-8"))
+
+        except urllib.error.HTTPError as erro:
+            return Response(
+                {"erro": "Erro ao consultar Google Places."},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        except Exception:
+            return Response(
+                {"erro": "Não foi possível consultar o serviço de destinos."},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        lugares = resultado.get("places", [])
+
+        if not lugares:
+            return Response(
+                {"erro": "Destino não encontrado. Tente outro endereço."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        lugar = lugares[0]
+
+        return Response({
+            "nome": lugar["displayName"]["text"],
+            "endereco": lugar["formattedAddress"],
+            "latitude": lugar["location"]["latitude"],
+            "longitude": lugar["location"]["longitude"]
         })
