@@ -206,3 +206,10 @@ MAILERS = {
         'TIMEOUT': 10,
     },
 }
+
+# Configuração de autenticação da API
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}

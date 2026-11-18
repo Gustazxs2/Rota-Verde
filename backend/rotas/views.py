@@ -38,11 +38,16 @@ def encontrar_vertice(latitude, longitude):
 
 
 def montar_sql_arestas(perfil):
+    join_travessia = "" 
     if perfil == "ciclista":
+        join_infraestrutura = """
+            LEFT JOIN public.infraestrutura_ciclovia i
+                ON i.osm_id = r.osm_id
+        """
         multiplicador = """
             (
                 CASE
-                    WHEN o.tags->'highway' = 'cycleway' THEN 0.65
+                    WHEN o.tags->'highway' = 'cycleway' THEN 1.0
                     WHEN o.tags->'highway' IN ('residential', 'living_street') THEN 0.90
                     WHEN o.tags->'highway' IN ('service', 'unclassified') THEN 1.10
                     WHEN o.tags->'highway' = 'tertiary' THEN 1.20
@@ -56,12 +61,42 @@ def montar_sql_arestas(perfil):
                 END
                 *
                 CASE
-                    WHEN o.tags->'cycleway' IN ('track', 'lane', 'shared_lane')
-                      OR o.tags->'cycleway:left' IN ('track', 'lane', 'shared_lane')
-                      OR o.tags->'cycleway:right' IN ('track', 'lane', 'shared_lane')
-                      OR o.tags->'cycleway:both' IN ('track', 'lane', 'shared_lane')
+                    WHEN o.tags->'cycleway' = 'crossing' THEN 1.0
+
+                    WHEN i.tipo = 'ciclovia' AND i.segregada IS TRUE
+                    THEN 0.65
+
+                    WHEN i.tipo = 'ciclovia' AND i.segregada IS FALSE
                     THEN 0.85
+
+                    WHEN o.tags->'cycleway' = 'track'
+                      OR o.tags->'cycleway:left' = 'track'
+                      OR o.tags->'cycleway:right' = 'track'
+                      OR o.tags->'cycleway:both' = 'track'
+                    THEN 0.75
+
+                    WHEN o.tags->'cycleway' = 'lane'
+                      OR o.tags->'cycleway:left' = 'lane'
+                      OR o.tags->'cycleway:right' = 'lane'
+                      OR o.tags->'cycleway:both' = 'lane'
+                    THEN 0.90
+
+                    WHEN o.tags->'cycleway' = 'shared_lane'
+                      OR o.tags->'cycleway:left' = 'shared_lane'
+                      OR o.tags->'cycleway:right' = 'shared_lane'
+                      OR o.tags->'cycleway:both' = 'shared_lane'
+                    THEN 1.0
+
                     ELSE 1.0
+                END
+                *
+                CASE
+                    WHEN o.tags->'maxspeed' IS NULL THEN 1.0
+                    WHEN (o.tags->'maxspeed')::numeric <= 30 THEN 1.0
+                    WHEN (o.tags->'maxspeed')::numeric <= 40 THEN 1.10
+                    WHEN (o.tags->'maxspeed')::numeric <= 50 THEN 1.20
+                    WHEN (o.tags->'maxspeed')::numeric <= 60 THEN 1.35
+                    ELSE 1.50
                 END
                 *
                 CASE
@@ -81,31 +116,81 @@ def montar_sql_arestas(perfil):
                     WHEN o.tags->'smoothness' = 'very_horrible' THEN 2.50
                     ELSE 1.0
                 END
-                *
-                CASE
-                    WHEN o.tags->'bicycle' = 'dismount' THEN 4.0
-                    ELSE 1.0
-                END
             )
         """
 
         permissao = """
-            CASE
-                WHEN tags->'bicycle' IN ('no', 'private', 'customers', 'permit') THEN -1
-                WHEN tags->'bicycle' IN ('yes', 'designated', 'permissive', 'dismount') THEN custo_base
-                WHEN tags->'access' IN ('no', 'private', 'customers', 'permit', 'delivery') THEN -1
-                ELSE custo_base
-            END
+
         """
 
         sentido = """
             CASE
-                WHEN o.tags ? 'oneway:bicycle' THEN COALESCE(o.tags->'oneway:bicycle', '')
-                ELSE COALESCE(o.tags->'oneway', '')
+                WHEN tags->'highway' = 'busway' THEN -1
+
+                WHEN tags->'bicycle' IN (
+                    'no', 'private', 'customers', 'permit'
+                ) THEN -1
+
+                WHEN tags->'bicycle' = 'dismount'
+                THEN custo_base * 1.5
+
+                WHEN tags->'bicycle' IN (
+                    'yes', 'designated', 'permissive'
+                ) THEN custo_base
+
+                WHEN tags->'access' IN (
+                    'no', 'private', 'customers', 'permit',
+                    'delivery', 'bus'
+                ) THEN -1
+
+                ELSE custo_base
             END
         """
 
     else:  # Pedestre
+        join_infraestrutura = """
+            LEFT JOIN public.infraestrutura_calcada i
+                ON i.osm_id = r.osm_id
+
+            LEFT JOIN LATERAL (
+                SELECT
+                    a.osm_tags->>'wheelchair' AS wheelchair,
+                    a.osm_tags->>'tactile_paving' AS tactile_paving
+                FROM public.infraestrutura_recursoacessibilidade a
+                WHERE
+                    a.tipo = 'piso_tatil'
+                    AND a.osm_id = 'w' || r.osm_id::TEXT
+                LIMIT 1
+            ) ac ON (
+                o.tags->'highway' = 'footway'
+                AND o.tags->'footway' = 'sidewalk'
+            )
+        """
+        join_travessia = """
+            LEFT JOIN LATERAL (
+                SELECT
+                    t.sinalizada,
+                    t.semaforizada
+                FROM public.infraestrutura_travessia t
+                WHERE
+                    t.osm_id IS NOT NULL
+                    AND ST_DWithin(
+                        t.geometria,
+                        r.geom,
+                        0.00001
+                    )
+                ORDER BY
+                    ST_Distance(
+                        r.geom::geography,
+                        t.geometria::geography
+                    )
+                LIMIT 1
+            ) tr ON (
+                o.tags->'highway' = 'crossing'
+            OR o.tags->'footway' = 'crossing'
+            )
+            """
+        
         multiplicador = """
             (
                 CASE
@@ -122,7 +207,51 @@ def montar_sql_arestas(perfil):
                 END
                 *
                 CASE
-                    WHEN o.tags->'sidewalk' IN ('both', 'left', 'right', 'yes') THEN 0.85
+                    WHEN i.acessivel IS FALSE THEN 1.30
+
+                    WHEN i.acessivel IS TRUE
+                     AND ac.tactile_paving = 'yes'
+                     AND ac.wheelchair = 'yes'
+                    THEN 0.75
+
+                    WHEN i.acessivel IS TRUE THEN 0.85
+
+                    WHEN ac.tactile_paving = 'yes'
+                     AND ac.wheelchair = 'yes'
+                    THEN 0.85
+
+                    WHEN ac.tactile_paving = 'yes' THEN 0.95
+
+                    ELSE 1.0
+                END
+                *
+
+                CASE
+                    WHEN tr.semaforizada IS TRUE
+                      OR o.tags->'crossing' = 'traffic_signals'
+                    THEN 0.85
+
+                    WHEN tr.sinalizada IS TRUE THEN 0.90
+
+                    WHEN o.tags->'crossing' = 'zebra' THEN 0.90
+
+                    WHEN o.tags->'crossing' = 'marked' THEN 0.95
+
+                    WHEN tr.sinalizada IS FALSE
+                      OR o.tags->'crossing' = 'unmarked'
+                    THEN 1.25
+
+                    ELSE 1.0
+                END
+                *
+                CASE
+                    WHEN i.acessivel IS TRUE THEN 0.85
+                    WHEN i.acessivel IS FALSE THEN 1.30
+                    ELSE 1.0
+                END
+                *
+                CASE
+                    WHEN i.tem_obstaculos IS TRUE THEN 1.40
                     ELSE 1.0
                 END
                 *
@@ -148,9 +277,20 @@ def montar_sql_arestas(perfil):
 
         permissao = """
             CASE
-                WHEN tags->'foot' IN ('no', 'private', 'customers', 'permit') THEN -1
-                WHEN tags->'foot' IN ('yes', 'designated', 'permissive') THEN custo_base
-                WHEN tags->'access' IN ('no', 'private', 'customers', 'permit', 'delivery') THEN -1
+                WHEN tags->'foot' IN (
+                    'no', 'private', 'customers', 'permit'
+                ) THEN -1
+                WHEN tags->'highway' = 'busway' THEN -1
+
+                WHEN tags->'foot' IN (
+                    'yes', 'designated', 'permissive'
+                ) THEN custo_base
+
+                WHEN tags->'access' IN (
+                    'no', 'private', 'customers', 'permit',
+                    'delivery', 'bus'
+                ) THEN -1
+
                 ELSE custo_base
             END
         """
@@ -168,6 +308,8 @@ def montar_sql_arestas(perfil):
                 {sentido} AS sentido
             FROM roteamento.rv_ways r
             JOIN roteamento.osm_ways o ON o.osm_id = r.osm_id
+            {join_infraestrutura}
+            {join_travessia}
         ),
         custos AS (
             SELECT
